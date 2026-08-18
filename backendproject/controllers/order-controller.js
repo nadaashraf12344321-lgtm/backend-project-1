@@ -1,21 +1,14 @@
-const Order = require("../config/models/order-model");
-const Product = require("../config/models/product-model");
+const Order = require("../models/order-model");
+const Product = require("../models/product-model");
 
-// @desc    Create a new order
+// @desc    Create a new order (Customer)
 // @route   POST /api/v1/orders
-// @access  Private
+// @access  Private (Customer / Admin)
 const createOrder = async (req, res) => {
   try {
     const { products, address } = req.body;
-    // Use authenticated user ID, or check req.body.user if provided
-    const userId = req.user ? req.user._id : req.body.user;
-
-    if (!userId) {
-      return res.status(400).json({
-        status: "error",
-        message: "User ID is required to create an order."
-      });
-    }
+    // Always assign authenticated user ID as order user
+    const userId = req.user._id;
 
     if (!products || !Array.isArray(products) || products.length === 0) {
       return res.status(400).json({
@@ -34,7 +27,7 @@ const createOrder = async (req, res) => {
     let calculatedTotalPrice = 0;
     const orderItems = [];
 
-    // Fetch actual prices from MongoDB to prevent client price tampering
+    // STOCK VALIDATION & SERVER-SIDE PRICE CALCULATION
     for (const item of products) {
       if (!item.product || !item.quantity || item.quantity <= 0) {
         return res.status(400).json({
@@ -51,11 +44,11 @@ const createOrder = async (req, res) => {
         });
       }
 
-      // Check stock availability (optional validation)
+      // Check stock availability
       if (dbProduct.quantity < item.quantity) {
         return res.status(400).json({
           status: "error",
-          message: `Insufficient stock for product '${dbProduct.name}'. Available: ${dbProduct.quantity}`
+          message: `Insufficient stock for product '${dbProduct.name}'. Available stock: ${dbProduct.quantity}`
         });
       }
 
@@ -78,14 +71,13 @@ const createOrder = async (req, res) => {
       status: "pending"
     });
 
-    // Optionally update inventory stock for ordered products
+    // DEDUCT STOCK FROM INVENTORY
     for (const item of orderItems) {
       await Product.findByIdAndUpdate(item.product, {
         $inc: { quantity: -item.quantity }
       });
     }
 
-    // Populate user and product details for response
     await order.populate([
       { path: "user", select: "name email phone address" },
       { path: "products.product", select: "name price imageUrl category" }
@@ -94,9 +86,7 @@ const createOrder = async (req, res) => {
     return res.status(201).json({
       status: "success",
       message: "Order placed successfully.",
-      data: {
-        order
-      }
+      data: { order }
     });
   } catch (error) {
     return res.status(500).json({
@@ -106,14 +96,14 @@ const createOrder = async (req, res) => {
   }
 };
 
-// @desc    Get all orders
+// @desc    Get orders (Customer gets own orders, Admin gets all)
 // @route   GET /api/v1/orders
 // @access  Private
 const getOrders = async (req, res) => {
   try {
-    // If admin, retrieve all orders; if regular user, retrieve user's orders
     let query = {};
-    if (req.user && req.user.role !== "admin") {
+    // Customers can ONLY view their own orders
+    if (req.user.role !== "admin") {
       query.user = req.user._id;
     }
 
@@ -125,9 +115,7 @@ const getOrders = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Orders retrieved successfully.",
-      data: {
-        orders
-      }
+      data: { orders }
     });
   } catch (error) {
     return res.status(500).json({
@@ -137,7 +125,7 @@ const getOrders = async (req, res) => {
   }
 };
 
-// @desc    Get order by ID
+// @desc    Get order details by ID
 // @route   GET /api/v1/orders/:id
 // @access  Private
 const getOrderById = async (req, res) => {
@@ -153,12 +141,18 @@ const getOrderById = async (req, res) => {
       });
     }
 
+    // AUTHORIZATION CHECK: Customer can only view their own order details
+    if (req.user.role !== "admin" && order.user._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden. You are not authorized to view this order."
+      });
+    }
+
     return res.status(200).json({
       status: "success",
       message: "Order details retrieved successfully.",
-      data: {
-        order
-      }
+      data: { order }
     });
   } catch (error) {
     return res.status(500).json({
@@ -168,7 +162,7 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// @desc    Update order status or address
+// @desc    Update order status or cancel order
 // @route   PUT /api/v1/orders/:id
 // @access  Private
 const updateOrder = async (req, res) => {
@@ -183,20 +177,49 @@ const updateOrder = async (req, res) => {
       });
     }
 
+    // AUTHORIZATION CHECK: Customers can only update their OWN orders
+    if (req.user.role !== "admin" && order.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden. You are not authorized to modify this order."
+      });
+    }
+
+    // CUSTOMER AUTHORIZATION RULE:
+    // Customers can ONLY cancel their own order if current status is 'pending'
+    if (req.user.role !== "admin") {
+      if (status && status !== "cancelled") {
+        return res.status(403).json({
+          status: "error",
+          message: "Forbidden. Customers are only allowed to cancel pending orders."
+        });
+      }
+      if (status === "cancelled" && order.status !== "pending") {
+        return res.status(400).json({
+          status: "error",
+          message: `Cannot cancel order. Order status is already '${order.status}'.`
+        });
+      }
+    }
+
     if (status) {
-      const allowedStatuses = [
-        "pending",
-        "confirmed",
-        "shipped",
-        "delivered",
-        "cancelled"
-      ];
+      const allowedStatuses = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
           status: "error",
           message: `Invalid status. Allowed values: ${allowedStatuses.join(", ")}`
         });
       }
+
+      // STOCK RESTORATION LOGIC: If order is transitioning to 'cancelled', restore stock
+      if (status === "cancelled" && order.status !== "cancelled") {
+        for (const item of order.products) {
+          await Product.findByIdAndUpdate(item.product, {
+            $inc: { quantity: item.quantity }
+          });
+        }
+      }
+
       order.status = status;
     }
 
@@ -213,9 +236,7 @@ const updateOrder = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Order updated successfully.",
-      data: {
-        order: updatedOrder
-      }
+      data: { order: updatedOrder }
     });
   } catch (error) {
     return res.status(500).json({
@@ -236,6 +257,23 @@ const deleteOrder = async (req, res) => {
         status: "error",
         message: "Order not found."
       });
+    }
+
+    // Only Admin (or customer deleting their own pending order)
+    if (req.user.role !== "admin" && order.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden. You are not authorized to delete this order."
+      });
+    }
+
+    // If deleting an active order, restore stock
+    if (order.status !== "cancelled") {
+      for (const item of order.products) {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { quantity: item.quantity }
+        });
+      }
     }
 
     await Order.findByIdAndDelete(req.params.id);

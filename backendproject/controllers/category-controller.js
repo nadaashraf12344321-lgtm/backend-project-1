@@ -1,8 +1,8 @@
-const Category = require("../config/models/category-model");
+const Category = require("../models/category-model");
 
 // @desc    Create a new category
 // @route   POST /api/v1/categories
-// @access  Private
+// @access  Private (Admin)
 const createCategory = async (req, res) => {
   try {
     const { name, description } = req.body;
@@ -30,9 +30,7 @@ const createCategory = async (req, res) => {
     return res.status(201).json({
       status: "success",
       message: "Category created successfully.",
-      data: {
-        category
-      }
+      data: { category }
     });
   } catch (error) {
     return res.status(500).json({
@@ -51,9 +49,7 @@ const getCategories = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Categories retrieved successfully.",
-      data: {
-        categories
-      }
+      data: { categories }
     });
   } catch (error) {
     return res.status(500).json({
@@ -78,9 +74,7 @@ const getCategoryById = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Category details retrieved successfully.",
-      data: {
-        category
-      }
+      data: { category }
     });
   } catch (error) {
     return res.status(500).json({
@@ -92,7 +86,7 @@ const getCategoryById = async (req, res) => {
 
 // @desc    Update category
 // @route   PUT /api/v1/categories/:id
-// @access  Private
+// @access  Private (Admin)
 const updateCategory = async (req, res) => {
   try {
     const { name, description } = req.body;
@@ -113,9 +107,7 @@ const updateCategory = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Category updated successfully.",
-      data: {
-        category: updatedCategory
-      }
+      data: { category: updatedCategory }
     });
   } catch (error) {
     return res.status(500).json({
@@ -127,7 +119,7 @@ const updateCategory = async (req, res) => {
 
 // @desc    Delete category
 // @route   DELETE /api/v1/categories/:id
-// @access  Private
+// @access  Private (Admin)
 const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);

@@ -1,38 +1,31 @@
-const Product = require("../config/models/product-model");
-const Category = require("../config/models/category-model");
+const Product = require("../models/product-model");
+const Category = require("../models/category-model");
 const deleteUploadedFile = require("../utils/delete-uploaded-file");
 
 // @desc    Create a new product
 // @route   POST /api/v1/products
-// @access  Private
+// @access  Private (Admin)
 const createProduct = async (req, res) => {
   try {
     const { name, description, price, quantity, category } = req.body;
 
-    // Validate required fields
     if (!name || price === undefined || quantity === undefined || !category) {
-      if (req.file) {
-        deleteUploadedFile(req.file.path);
-      }
+      if (req.file) deleteUploadedFile(req.file.path);
       return res.status(400).json({
         status: "error",
         message: "Please provide name, price, quantity, and category."
       });
     }
 
-    // Verify category existence
     const existingCategory = await Category.findById(category);
     if (!existingCategory) {
-      if (req.file) {
-        deleteUploadedFile(req.file.path);
-      }
+      if (req.file) deleteUploadedFile(req.file.path);
       return res.status(404).json({
         status: "error",
         message: "Referenced category not found."
       });
     }
 
-    // Store uploaded image path
     let imageUrl = "";
     if (req.file) {
       imageUrl = `/uploads/products/${req.file.filename}`;
@@ -47,20 +40,15 @@ const createProduct = async (req, res) => {
       imageUrl
     });
 
-    // Populate category info before returning
     await product.populate("category");
 
     return res.status(201).json({
       status: "success",
       message: "Product created successfully.",
-      data: {
-        product
-      }
+      data: { product }
     });
   } catch (error) {
-    if (req.file) {
-      deleteUploadedFile(req.file.path);
-    }
+    if (req.file) deleteUploadedFile(req.file.path);
     return res.status(500).json({
       status: "error",
       message: error.message
@@ -87,9 +75,7 @@ const getProducts = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Products retrieved successfully.",
-      data: {
-        products
-      }
+      data: { products }
     });
   } catch (error) {
     return res.status(500).json({
@@ -114,9 +100,7 @@ const getProductById = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Product details retrieved successfully.",
-      data: {
-        product
-      }
+      data: { product }
     });
   } catch (error) {
     return res.status(500).json({
@@ -128,14 +112,12 @@ const getProductById = async (req, res) => {
 
 // @desc    Update a product
 // @route   PUT /api/v1/products/:id
-// @access  Private
+// @access  Private (Admin)
 const updateProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      if (req.file) {
-        deleteUploadedFile(req.file.path);
-      }
+      if (req.file) deleteUploadedFile(req.file.path);
       return res.status(404).json({
         status: "error",
         message: "Product not found."
@@ -152,9 +134,7 @@ const updateProduct = async (req, res) => {
     if (category) {
       const existingCategory = await Category.findById(category);
       if (!existingCategory) {
-        if (req.file) {
-          deleteUploadedFile(req.file.path);
-        }
+        if (req.file) deleteUploadedFile(req.file.path);
         return res.status(404).json({
           status: "error",
           message: "Referenced category not found."
@@ -163,9 +143,7 @@ const updateProduct = async (req, res) => {
       product.category = category;
     }
 
-    // Handle new image upload
     if (req.file) {
-      // Delete old image if it exists
       if (product.imageUrl) {
         deleteUploadedFile(product.imageUrl);
       }
@@ -178,14 +156,10 @@ const updateProduct = async (req, res) => {
     return res.status(200).json({
       status: "success",
       message: "Product updated successfully.",
-      data: {
-        product: updatedProduct
-      }
+      data: { product: updatedProduct }
     });
   } catch (error) {
-    if (req.file) {
-      deleteUploadedFile(req.file.path);
-    }
+    if (req.file) deleteUploadedFile(req.file.path);
     return res.status(500).json({
       status: "error",
       message: error.message
@@ -195,7 +169,7 @@ const updateProduct = async (req, res) => {
 
 // @desc    Delete a product
 // @route   DELETE /api/v1/products/:id
-// @access  Private
+// @access  Private (Admin)
 const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -206,7 +180,6 @@ const deleteProduct = async (req, res) => {
       });
     }
 
-    // Delete image from uploads folder if present
     if (product.imageUrl) {
       deleteUploadedFile(product.imageUrl);
     }

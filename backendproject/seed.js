@@ -1,7 +1,8 @@
 const dotenv = require("dotenv");
 const connectDB = require("./config/db-config");
-const Category = require("./config/models/category-model");
-const Product = require("./config/models/product-model");
+const User = require("./models/user-model");
+const Category = require("./models/category-model");
+const Product = require("./models/product-model");
 
 dotenv.config();
 
@@ -34,9 +35,32 @@ const seedDatabase = async () => {
 
     console.log("Seeding BagStore database...");
 
-    // Clear existing sample categories and products
+    // Clear existing sample categories, products, and test users
     await Category.deleteMany({});
     await Product.deleteMany({});
+    await User.deleteMany({ email: { $in: ["admin@bagstore.com", "customer@bagstore.com"] } });
+
+    // Seed Admin Account
+    const adminUser = await User.create({
+      name: "BagStore Admin",
+      email: "admin@bagstore.com",
+      password: "admin123",
+      role: "admin",
+      phone: "+1112223334",
+      address: "BagStore HQ, 100 Fashion Ave, New York, NY"
+    });
+    console.log(`Created Admin User: ${adminUser.email} (role: ${adminUser.role})`);
+
+    // Seed Customer Account
+    const customerUser = await User.create({
+      name: "Jane Customer",
+      email: "customer@bagstore.com",
+      password: "customer123",
+      role: "customer",
+      phone: "+1987654321",
+      address: "742 Evergreen Terrace, Springfield, OR"
+    });
+    console.log(`Created Customer User: ${customerUser.email} (role: ${customerUser.role})`);
 
     // Insert categories
     const createdCategories = await Category.insertMany(sampleCategories);

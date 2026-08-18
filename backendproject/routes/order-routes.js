@@ -9,7 +9,7 @@ const {
 } = require("../controllers/order-controller");
 const { protect } = require("../middlewares/auth-middleware");
 
-// All order endpoints are protected by auth middleware
+// Protected routes (Requires authentication)
 router.post("/", protect, createOrder);
 router.get("/", protect, getOrders);
 router.get("/:id", protect, getOrderById);
